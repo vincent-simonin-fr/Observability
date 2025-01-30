@@ -1,0 +1,65 @@
+services:
+  timescaledb:
+    image: timescale/timescaledb-ha:pg14
+    container_name: timescaledb
+    ports:
+      - 5442:5432
+    environment:
+      - POSTGRES_DB=databox
+      - POSTGRES_PASSWORD=mypassword
+    volumes:
+      - 'C:/PodmanVolumes/timescaledb/data:/var/lib/postgresql/data'
+      - ./timescaledb/init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: always
+    networks:
+      - monitoring_db
+
+  postgres_exporter:
+    image: quay.io/prometheuscommunity/postgres-exporter
+    container_name: postgres_exporter
+    ports:
+      - 9187:9187
+    environment:
+      DATA_SOURCE_NAME: 'postgres://monitoring:monitoring@timescaledb:5432/databox?sslmode=disable'
+    networks:
+      - monitoring_db
+    depends_on:
+      - timescaledb
+
+  prometheus:
+    image: prom/prometheus
+    container_name: prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ports:
+      - 9090:9090
+    restart: unless-stopped
+    volumes:
+      - ./prometheus:/etc/prometheus
+      - C:/PodmanVolumes/Observability_TimescaleDb/prometheus/prom_data:/prometheus
+    networks:
+      - monitoring_db
+    depends_on:
+      - postgres_exporter
+
+  grafana:
+    image: grafana/grafana
+    container_name: grafana
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafana
+    volumes:
+      - ./grafana:/etc/grafana/provisioning
+    networks:
+      - monitoring_db
+    depends_on:
+      - prometheus
+
+volumes:
+  prom_data:
+
+networks:
+  monitoring_db:
